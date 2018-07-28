@@ -1,8 +1,11 @@
 * what is this?
-_S_ ignal
-_P_ rocessing 
-_O_ rg
-_N_ otes
+=S= ignal
+
+=P= rocessing 
+
+=O= rg
+
+=N= otes
 
 This is an example of using org-mode to organize a small software project.
 The project here is (primarily) C++, and consists of a couple of related things: 
