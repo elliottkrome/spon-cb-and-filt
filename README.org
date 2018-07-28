@@ -1,15 +1,23 @@
 * what is this?
+_S_ ignal
+_P_ rocessing 
+_O_ rg
+_N_ otes
+
 This is an example of using org-mode to organize a small software project.
 The project here is (primarily) C++, and consists of a couple of related things: 
 
 - A (templated)  [[https://en.wikipedia.org/wiki/Circular_buffer][circular buffer]] class: ~Cb~
 - A (templated) digital filter implemented in canonical form (aka direct form II) [[https://en.wikipedia.org/wiki/Digital_filter#Direct_form_II][Wikipedia]], [[https://ccrma.stanford.edu/~jos/fp/Direct_Form_II.html][Stanford CCRMA explanation]] that inherits from ~Cb~: ~Filt~
 - A driver program
-- [[*testing][testing stuff]] to test the driver program's output against ~MATLAB~ / ~Octave~ output:
+- testing stuff to test the driver program's output against ~MATLAB~ / ~Octave~ output:
   1) some example files to test the filter
      - a sine sweep, as it allows for easy visualization of filters
      - a short impulse
-  2) some ~MATLAB~ / ~Octave~ code to generate the above files, i/o helpers, and verification tests
+  2) some ~MATLAB~ / ~Octave~ code to generate the above files, i/o helpers, and verification tests. 
+
+I hope that this is the first of many _SPON_ examples I post - I have a lot of signal processing notes in org-format, but few that are polished at all.
+
 * why is this?
 I really like how org-mode allows you to create a document that
 - contains multiple programming languages, where all are callable like python is from an IPython notebook.
@@ -17,7 +25,7 @@ I really like how org-mode allows you to create a document that
 
 Think of ~spon-cb-and-filt.org~ as like an ~IPython~ or ~MATLAB~ notebook, except that it allows you to include ~C++~ (or, really, just about any language under the sun) alongside ~Python~ and or ~MATLAB~. 
 
-One general, one kind of place where this kind of document is useful is for exploring and implementing dsp-ish things where it isn't necessarily obvious how to verify correctness. In particular the ~spon-cb-and-filt.org~ document
+In general, one kind of place where this kind of document is useful is for exploring and implementing dsp-ish things where it isn't necessarily obvious how to verify correctness. In particular the ~spon-cb-and-filt.org~ document
 - does some dsp stuff in ~C++~ (convolution, basic ARMA filtering, etc.)
 - makes the project via ~Make~
 - calls the resulting executable from a ~bash~ shell
