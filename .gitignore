@@ -1,0 +1,12 @@
+# binary files to ignore
+#
+bin/*
+examples/outputs/*.raw
+
+# latex-generated pngs that are embedded in org-mode
+#
+ltximg
+
+# lsp artifacts
+#
+.cquery*
