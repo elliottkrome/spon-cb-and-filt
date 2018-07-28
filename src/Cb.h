@@ -124,7 +124,6 @@ template<typename T>
 const char* Cb<T>::name() {
   return "Cb";
 }
-
 /*
 template<typename T>
 void Cb<T>::debug() {

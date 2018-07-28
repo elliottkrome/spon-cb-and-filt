@@ -1,0 +1,749 @@
+#+Title: circular buffer, ARMA filter
+* ~Cb~ - circular buffer class
+:PROPERTIES:
+:header-args:  :tangle src/Cb.h
+:header-args+: :main no
+:END:
+
+** top matter
+We use ~size_t~ from ~stdio.h~, although we don't really need to. 
+#+BEGIN_SRC C++ :includes <iostream> 
+#include <stdio.h>
+#+END_SRC
+** class definition
+This acts as a building block for other classes that actually do interesting things. As such, ~push~ and ~pull~ will be overridden by those classes, and are ~virtual~ here.
+
+Push and pull return booleans that indicate whether or not they have succeeded in their operations - if either the read pointer ~rptr~ or the ~wptr~ catch up to eachother, then these operations will return false to indicate that the buffer is either "full" or "empty", respectively.
+#+BEGIN_SRC C++
+template<typename T>
+class Cb {
+ public:
+
+  static const char* name();
+
+  explicit Cb(size_t size_a);
+
+  ~Cb();
+
+  virtual bool push(
+      const T* array_a,
+      size_t size_a);
+
+  virtual bool pull(
+      T* array_a,
+      size_t size_a);
+
+  // protected:
+  size_t bsize;
+  T* buffer;
+
+  // read and write pointers:
+  //  rptr: next location where new data can be stored     (in)
+  //  wptr: next location where data to be written resides (out)
+  //
+  size_t rptr;
+  size_t wptr;
+  void debug();
+};
+#+END_SRC
+** implementation
+*** Constructor, Destructor
+#+BEGIN_SRC C++
+template<typename T>
+Cb<T>::Cb(size_t size_a) {
+  
+  bsize = size_a;        // store the buffer size
+  buffer = new T[bsize]; // create a buffer to store data
+
+  // initialize the read and write pointers
+  //
+  rptr = 0;         // set the read pointer to the beginning of the buffer
+  wptr = bsize - 1; // set the write pointer to the end of the buffer
+}
+
+template<typename T>
+Cb<T>::~Cb() {
+  delete[] buffer;
+}
+#+END_SRC
+*** ~push~
+#+BEGIN_SRC C++
+template<typename T>
+bool Cb<T>::push(const T* array_a, size_t size_a){
+
+  // loop over the input data
+  //
+  for (long i = 0; i < size_a; i++) {
+
+    // check for room on the circular buffer
+    // if it is final iteration, we are good to go, else return false
+    //  as we are trying to read into an index where there is data
+    //  that hasn't been processed yet
+    //
+    if (rptr == wptr) {
+
+      // if we have done a full loop and filled the buffer, then we can do more
+      //
+      if (i == size_a - 1) {
+	return true;
+      }
+
+      // if rptr has caught up with wptr and we haven't done a full loop, we
+      //  indicate this to the caller by returning false
+      //
+      else {
+	return false;
+      }
+    }
+    //
+    // end of room check
+
+    // if there is room left for more data to be read in, then do so
+    //  and advance the pointer, wrapping at end of memory
+    //
+    else {
+      buffer[rptr] = array_a[i];
+      rptr = (rptr + 1) % bsize;
+    }
+    //
+    // end of individual read
+ 
+  }
+  return true;
+}
+#+END_SRC
+*** ~pull~
+#+BEGIN_SRC C++
+// This pulls data from the circular buffer to the output array.
+// If there is insufficient data available, it returns false.
+//
+template<typename T>
+bool Cb<T>::pull(T* array_a, size_t size_a) {
+ 
+  // loop over the data and output
+  //
+  for (long i = 0; i < size_a; i++) {
+
+    // if wptr has caught up to rptr, there is insufficient data
+    //
+    if (wptr == rptr)
+      return false;
+
+    wptr = (wptr + 1) % bsize;
+    array_a[i] = buffer[wptr];
+  }
+  return true;
+}
+#+END_SRC
+*** miscellaneous
+#+BEGIN_SRC C++
+template<typename T>
+const char* Cb<T>::name() {
+  return "Cb";
+}
+/*
+template<typename T>
+void Cb<T>::debug() {
+  std::cerr << "<---" << this->name() << " %s --->" << std::endl;
+  std::cerr << " read pointer = " << rptr << " write pointer = " << wptr << std::endl;
+  std::cerr << " buffer[] = ";
+  for (long i = 0; i < bsize; i++) {
+    std::cerr << buffer[i];
+  } std::cerr << std::endl;
+  std::cerr << "<--- done --->\n" << std::endl;
+}
+*/
+#+END_SRC
+* ~Filt~ - ARMA filter class
+:PROPERTIES:
+:header-args:  :tangle src/Filt.h
+:header-args+: :main no
+:END:
+** mathematical background
+*** diagram, useful formulas
+Here is an image for a [[https://en.wikipedia.org/wiki/Digital_biquad_filter][biquad filter]] in [[https://en.wikipedia.org/wiki/Digital_filter#Direct_form_II][direct form II]]. 
+[[file:resources/biquad.png]]
+| /   | <                                                 |
+| $a$ | vector of autoregressive (AR) filter coefficients |
+| $b$ | vector of moving average (MA) filter coefficients |
+| $p$ | number of autoregressive (AR) filter coefficients |
+| $q$ | number of autoregressive (MA) filter coefficients |
+| $x$ | input vector                                      |
+| $y$ | output vector                                     |
+
+The ~Filt~ class here is a direct form II filter (it has one memory vector and two accumulators), but it can have much coefficient vectors of arbitrarily large sizes $p$ and $q$, where the biquad only has vectors of length 2. The pattern is the same for any size, there is just a different number of terms.
+
+<<<difference equation>>>:
+
+$$
+y[n] = 
+ \overbrace{\sum\limits_{j=0}^{j=q}b[j]  x[n - j]}^{\text{feed-forward}}
+ \overbrace{-\sum\limits_{i=1}^{i=p}a[i]  y[n-i]}^{\text{feed-back}} 
+$$
+
+<<<transfer function>>>
+\begin{align*}
+H(z)
+  &=  \frac{Y(x)}{X(z)}\\
+  &= \frac{\sum\limits_{j=0}^{j=q} b[j]z^{-j}}{1+\sum\limits_{i=1}^{i=p}a[i]z^{-i}}
+\end{align*}
+
+To determine the effect of the filter on unity input at a particular frequency $f$, you evaluate $H(z)$ at $z=e^{j2\pi\frac{f}{f_s}}$.
+
+*** derivation of useful formulas (skip if you don't care)
+I think deriving the difference equation is actually the hard part here - once you have the difference equation, the mechanics of the z-transform / transfer function business is trivial.
+**** difference equation
+Let's declare a vector $w$ for the "memory" - the stuff in the middle that is fed back and fed forward. $w[n]$ is the output of the left-hand summer at time $n$ - it is simply the inner product of the memory-vector and the auto-regressive (hence the name) coefficient vector:
+
+$w[n] = x[n] - \sum\limits_{i=1}^{i=p}a[i]  w[n-i]$
+It will be necessary to talk about versions of this memory with some delay $\heartsuit$. We will denote this like so:
+$w[n-\heartsuit]$ is pushed back into memory $\heartsuit$ samples, so 
+$w[n-\heartsuit] = x[n-\heartsuit] - \sum\limits_{i=1}^{i=p}a[i]  w[n-i - \heartsuit]$
+(time invariance)
+
+For convenience, we will assume that $p=q$ (this is justified as we can just fill in any missing coefficients with zeros).
+
+$y[n]$ is the output of the right-hand summer:
+\begin{align*}
+y[n] 
+  &= \sum\limits_{j=0}^{j=q}b[j] w[n-j] \\
+  &= \sum\limits_{j=0}^{j=q}b[j]\dot \Bigg[x[n-j] - \sum\limits_{i=1}^{i=p}a[i]  w[n-i-j]\Bigg] \\
+  &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{j=0}^{j=q}\sum\limits_{i=1}^{i=p}b[j] a[i]  w[n-j-i]\\
+  &= \\
+  &\qquad\text{// similarly to the above case of } w[n-\heartsuit] \\
+  &\qquad\text{// }y[n-\heartsuit] = \sum\limits_{j=0}^{j=q}b[j] w[n-j-\heartsuit]\text{, so:} \\
+  &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{i=1}^{i=p} a[i] \underbrace{\sum\limits_{j=0}^{j=q}b[j] w[n-j-i]}_{\text{this is }y[n-i]}\\
+  &=\sum\limits_{j=0}^{j=q}b[j]  x[n - j] -\sum\limits_{i=1}^{i=p}a[i]  y[n-i]\\
+\end{align*}
+and we have derived our difference equation.
+**** transfer function
+starting from the difference equation.
+\begin{align*}
+y[n]
+  &= \sum\limits_{j=0}^{j=q}b[j]  x[n - j] -\sum\limits_{i=1}^{i=p}a[i]  y[n-i]\\
+y[n] + \sum\limits_{i=1}^{i=p}a[i]  y[n-i]
+  &= \sum\limits_{j=0}^{j=q}b[j]  x[n - j] \\
+Y(z) z^0 + \sum\limits_{i=1}^{i=p}a[i]Y(z)z^{-i}
+  &= \sum\limits_{j=0}^{j=q} b[j]X(z)z^{-j}\\
+Y(z)\Big(1 + \sum\limits_{i=1}^{i=p}a[i]Y(z)z^{-i}\Big)
+  &= X(z)\sum\limits_{j=0}^{j=q} b[j]z^{-j}\\
+\frac{Y(x)}{X(z)}
+  &= \frac{\sum\limits_{j=0}^{j=q} b[j]z^{-j}}{1+\sum\limits_{i=1}^{i=p}a[i]z^{-i}}  \\
+  &= H(z)\\
+\end{align*}
+
+** top matter
+This class inherits from the circular buffer class ~Cb~, so we include that. We reuse most of the internals, just reimplemeting ~pull~ so that data is filtered as it is pulled off the buffer, as well as adding methods ~set_filter~ and ~reset_mem~.
+#+BEGIN_SRC C++
+#include "Cb.h"
+#+END_SRC
+
+
+** definition
+#+BEGIN_SRC C++ :includes
+template<typename T>
+class Filt : public Cb<T> {
+ public:
+
+  static const char* name();
+
+  explicit Filt(
+      size_t buffer_size_a,
+      size_t max_mem_size_a);
+
+  ~Filt();
+
+  bool reset_mem();
+
+  bool pull(
+      T* array_a,
+      size_t size_a);
+
+  bool set_filter(
+      const T* a,  // autoregressive (AR) filter coefficients
+      size_t   p,  // number of AR coefficients
+      const T* b,  // moving average (MA) filter coefficients
+      size_t   q); // number of MA coefficients -in
+
+ private:
+  long filter_ptr_d;
+  long max_mem_d;
+  long n_MA_coefs_d;
+  long n_AR_coefs_d;
+  T* AR_coefs_d;
+  T* mem_d;
+  T* MA_coefs_d;
+};
+#+END_SRC
+** implementation
+*** Constructor, Destructor 
+#+BEGIN_SRC C++
+template<typename T>
+Filt<T>::Filt(
+    size_t buffer_size_a,
+    size_t max_mem_a) :
+  Cb<T>(buffer_size_a),
+  max_mem_d(max_mem_a),
+  filter_ptr_d(0) {
+
+  mem_d      = new T[max_mem_d];
+  AR_coefs_d = new T[max_mem_d];
+  MA_coefs_d = new T[max_mem_d];
+
+  // zero out memory
+  //
+  for (int i = 0; i < max_mem_d; i++) {
+    mem_d[i] = 0;
+  }
+}
+template<typename T>
+Filt<T>::~Filt() {
+  delete [] mem_d;
+  delete [] AR_coefs_d;
+  delete [] MA_coefs_d;
+}
+#+END_SRC
+*** ~pull~
+#+BEGIN_SRC C++
+
+template<typename T>
+bool Filt<T>::pull(
+    T*     array_a,    // out: filtered output
+    size_t size_a)  {  // in:  number of samples to filter
+
+  long tmp_ptr;     // keeps filter ptr wrapped in circBuff during loops
+  long n = 0;       // to loop over number of samples to process
+  long i = 0;       // to loop over number of MA coefficients 
+  long j = 0;       // to loop over number of AR coefficients
+  T left_hand_acc;  // to accumulate (MA . mem_d) 
+  T right_hand_acc; // to accumulate (AR . mem_d)
+
+  // perform sample processing loop size_a times
+  //  n used to index values placed in output array_a upon one loop completion
+  //
+  for (n = 0; n < size_a; n++ ) {
+
+    // if this->wptr has caught up to this->rptr, there is insufficient data
+    //
+    if (this->wptr == this->rptr)
+      return false;
+
+    // advance pointer, wrapping around if necessary
+    //
+    this->wptr = (this->wptr + 1) % this->bsize;
+
+    // advance mem_d pointer, wrapping around if necessary
+    //
+    filter_ptr_d = (filter_ptr_d + 1) % max_mem_d;
+
+    // summer setup:
+    //  place next input in left_hand_acc (multiplied by the appropriate coef)
+    //  reset right_hand_acc to 0
+    //
+    left_hand_acc = AR_coefs_d[0] * this->buffer[this->wptr];
+    right_hand_acc = 0;
+
+    // accumulate filter's memory vector dotted with AR coefficient vector
+    //
+    for (j = 1; j < n_AR_coefs_d; j++) {
+
+      // update tmp_ptr with j value
+      //  note that j looks "backward" in memory, hence the '-' operation
+      //
+      tmp_ptr = (max_mem_d + filter_ptr_d - j) % max_mem_d;
+
+      // perform accumulation
+      // 
+      left_hand_acc = left_hand_acc + (AR_coefs_d[j] * mem_d[tmp_ptr]);
+    }
+
+    // store new memory in mem_d
+    //
+    mem_d[filter_ptr_d] = left_hand_acc;
+   
+    // accumulate filter's memory vector dotted with MA coefficient vector
+    //
+    for(i = 0; i < n_MA_coefs_d; i++) {
+
+      // update tmp_ptr with i value
+      //  note that i looks "backward" in memory, hence the '-' operation
+      //
+      tmp_ptr = (max_mem_d + filter_ptr_d - i) % max_mem_d;
+
+      // perform accumulation
+      //
+      right_hand_acc = right_hand_acc + (MA_coefs_d[i] * mem_d[tmp_ptr]);
+    }
+    
+    // place one processed sample in output buffer
+    //
+    array_a[n] = right_hand_acc;
+  }
+  return true;
+}
+#+END_SRC
+*** helpers
+#+BEGIN_SRC C++
+template<typename T>
+bool Filt<T>::set_filter(
+    const T* a,   // autoregressive (AR) filter coefficients
+    size_t   p,   // number of AR coefficients
+    const T* b,   // moving average (MA) filter coefficients
+    size_t   q) { // number of MA coefficients
+
+  if (p > max_mem_d || q > max_mem_d) {
+    return false;
+  }
+
+  n_AR_coefs_d = p;
+  n_MA_coefs_d = q; 
+
+  for (long i = 0; i < n_AR_coefs_d; i++) {
+    AR_coefs_d[i] = a[i];
+  }
+  for (long i = 0; i < n_MA_coefs_d; i++) {
+    MA_coefs_d[i] = b[i];
+  }
+  return true;
+}
+
+template<typename T>
+bool Filt<T>::reset_mem() {
+  for (long i = 0; i < max_mem_d; i++) {
+    mem_d = 0;
+  }
+  return true;
+}
+#+END_SRC
+* ~main~ - a driver program
+:PROPERTIES:
+:header-args:  :tangle src/main.cc
+:header-args+: :main no
+:END:
+** ~#include~ s and ~int main(int argc, char** argv)~
+#+BEGIN_SRC C++
+#include "Filt.h"
+#include <stdio.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <math.h>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <boost/program_options.hpp>
+
+int main(int argc, char** argv) {
+#+END_SRC
+** ~boost::program_options~ 
+#+BEGIN_SRC C++ 
+  // variables to store parsed cmdl arguments in
+  //
+  bool help_flag, unspecified_io;
+  double sample_freq, frame_dur, win_dur;
+  std::string in_file_str, out_file_str, coefs_file;
+
+  namespace po = boost::program_options;
+  po::options_description po_general("General options");
+  po::options_description po_all("Interface");
+  po::options_description po_parameters("Parameters");
+  po::options_description po_io("I/O:    (must specify)");
+
+  po_general.add_options()
+    ("help,h",     "produce this help message and exit");
+  po_io.add_options()
+    ("in-file,i",  po::value<std::string>(&in_file_str)->default_value(""), "file to process")
+    ("out-file,o", po::value<std::string>(&out_file_str)->default_value(""), "file to output");    
+  po_parameters.add_options()
+    ("samp-freq,s",  po::value<double>(&sample_freq)->default_value(8000), "sampling frequency (samps / secs)")
+    ("frame-dur,f",  po::value<double>(&frame_dur)->default_value(0.02, "0.02"),   "frame duration     (secs)")
+    ("window-dur,w", po::value<double>(&win_dur)->default_value(0.04, "0.04"),     "window duration    (secs)")
+    ("coefs-file,c", po::value<std::string>(&coefs_file)->default_value("none"), "filter coefficient file");    
+
+  po_all.add(po_general).add(po_parameters).add(po_io);
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, po_all), vm);
+
+  po::notify(vm);
+
+  if (unspecified_io = (in_file_str.empty() || out_file_str.empty())) {
+    std::cout << "\n unspecified input and / or output. \n\n";
+  }
+  if (vm.count("help") || unspecified_io) {
+    std::cout << po_all;
+    exit(0);
+  }
+#+END_SRC
+** setup
+#+BEGIN_SRC C++ 
+  FILE* in_file = fopen(in_file_str.c_str(), "r");
+  FILE* out_file = fopen(out_file_str.c_str(), "w");
+
+  long M = frame_dur * sample_freq; // number of samples in window
+  long N = win_dur   * sample_freq; // number of samples in frame
+
+  double buf_in[M];   // define a buffer to hold the data from data in 
+  double buf_out[M];  // define a buffer to hold the output data 
+
+  long nsamples_read, nsamples_write, n = 0;
+
+  // create a circular buffer
+  //
+  Filt<double> filter(N, N);  
+  double MA_coefs[10] = {1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0};
+  double AR_coefs[10] = {-1, -0.1, 0, 0, 0, 0, 0, 0, 0, 0};
+  filter.set_filter(AR_coefs, 10, MA_coefs, 10);
+#+END_SRC
+** running the filter
+#+BEGIN_SRC C++ 
+  while ((nsamples_read = fread(buf_in, sizeof(double), M, in_file)) > 0) {
+
+    filter.push(buf_in, nsamples_read);
+    
+    if (filter.pull(buf_out, M)) {
+      nsamples_write = fwrite(buf_out, sizeof(double), M, out_file);
+    } 
+  }
+
+  // flush
+  //
+  filter.pull(buf_out, nsamples_read);
+  fwrite(buf_out, sizeof(double), nsamples_read, out_file);
+  return true;
+}
+#+END_SRC
+* ~Makefile~, valgrind
+:PROPERTIES:
+:header-args: :tangle Makefile
+:END:
+** directory setup
+some basic variables.
+#+BEGIN_SRC makefile
+BDIR=bin
+SDIR=src
+EXAMPLE_DIR=examples
+EXEC=$(BDIR)/run
+#+END_SRC
+It is probably sloth, but I prefer to use boost's command-line options rather than parsing the command line myself.
+#+BEGIN_SRC makefile
+BOOST_ROOT = /usr/local/opt/boost
+BOOST_INCS = $(BOOST_ROOT)/include/boost/include
+BOOST_LIBS = $(BOOST_ROOT)/lib/
+#+END_SRC
+** compiler setup
+#+BEGIN_SRC makefile
+CC = g++-7
+CFLAGS += -g -std=c++11
+LDFLAGS= -L$(BOOST_LIBS) -lboost_program_options
+#+END_SRC
+** dependencies, headers
+#+BEGIN_SRC makefile
+HEADERS = $(wildcard $(SDIR)/*.h)
+DEPS    = $(HEADERS)
+DEPS += -I$(BOOST_INCS)
+#+END_SRC
+** test command
+#+BEGIN_SRC makefile 
+TEST_COMMAND_1 = $(EXEC) \
+	-i examples/inputs/sine_sweep.raw \
+	-o examples/outputs/sine_sweep_filt.raw
+#+END_SRC
+** targets
+*** default
+#+BEGIN_SRC makefile
+all: main
+#+END_SRC
+*** run
+Sometimes I like to just type ~make run~, rather than typing ~make~ and then calling the executable manually
+#+BEGIN_SRC makefile
+run: main
+	$(TEST_COMMAND_1)
+#+END_SRC
+*** calling valgrind
+Sometimes I like to be able to rebuild and call valgrind without remembering how to set it up. This is obviously a very simple setup for valgrind, but it is easy to make it more interesting.
+#+BEGIN_SRC makefile
+grind: main
+	valgrind -v $(TEST_COMMAND_1) 
+#+END_SRC
+*** main
+#+BEGIN_SRC makefile
+main:
+	$(CC) $(CFLAGS) $(DEPS) $(SDIR)/main.cc $^ -o $(EXEC)  $(LDFLAGS)
+#+END_SRC
+*** clean
+#+BEGIN_SRC makefile
+clean:
+	rm -f $(EXEC)
+#+END_SRC
+* testing
+:PROPERTIES:
+:header-args:  :session
+:header-args+: :results file
+:header-args+: :noweb yes
+:header-args+: :results output silent
+:END:
+** helpers
+*** ~MATLAB~ / ~Octave~: read / write ~.raw~ files
+We indicate the format via the string ~"double"~ - we are using 32-bit floats.
+
+#+BEGIN_SRC octave  
+global format_string = "double"
+#+END_SRC
+
+Here are some simple functions to manage i/o:
+#+BEGIN_SRC octave
+function vector = write_raw(filename_a, data_a)
+  global format_string
+  fid = fopen(filename_a, "w");
+  vector = fwrite(fid, data_a, format_string);
+  fclose(fid);
+end
+
+function vector = read_raw(filename_a)
+  global format_string
+  fid = fopen(filename_a, "r");
+  vector = fread(fid, Inf, format_string);
+  fclose(fid);
+end
+#+END_SRC
+
+*** helper snippet for plotting in emacs
+This is a little snippet so that the plots will show up embedded under the ~#+RESULTS:~ associated with their plotting code.
+It needs the name of the plot file to already be in the workspace as `pname'
+#+Name: disp-fig
+#+BEGIN_SRC octave 
+print(pname, "-dpng"); ans = pname;
+#+END_SRC
+
+** sine sweep
+A sine sweep allows for simple visualization of the frequency response of the filter.
+*** setup, paramaters
+#+BEGIN_SRC octave  
+sweep_fname = "examples/inputs/sine_sweep.raw";
+
+Fs =       8000;   % samps / sec
+dt =       1 / Fs;
+duration = 5;      % seconds
+top_freq = 4000;   % Hs
+#+END_SRC
+
+If using ~Octave~, for ~chirp~ we need to load the ~signal~ package. If it is not installed, we install it from forge (commented out here.)
+#+BEGIN_SRC octave
+% pkg install -forge signal
+pkg load signal
+#+END_SRC
+
+*** create, write, and double-check by reading back in and inspecting
+**** create, write
+#+BEGIN_SRC octave
+x = [0:dt:duration];
+sweep = chirp(x, 0, duration, top_freq) / 1.5;
+write_raw(sweep_fname, sweep);
+#+END_SRC
+
+**** read back in and check (unfiltered): listen, view spectrogram and waveform
+Just to make sure that everything is working as expected (before filtering), we can read our chirp back in and inspect it.
+***** read in
+#+BEGIN_SRC octave 
+vector = read_raw("examples/inputs/sine_sweep.raw");
+#+END_SRC
+***** listen to audio
+#+BEGIN_SRC octave  
+player = audioplayer(vector, Fs, 16);  % compare to audioplayer(sweep, Fs, 16)
+play(player);
+#+END_SRC
+This should sound like a chirp signal.
+***** spectrogram
+We can examine the spectrogram, just for overkill.
+#+BEGIN_SRC octave :results file
+overlap = 80
+window  = 100;
+nfft    = 2 ^ nextpow2(window); 
+specgram(vector, nfft, Fs, window, overlap);
+pname = "examples/plots/sine_sweep_spectrogram.png"; <<disp-fig>>
+#+END_SRC    
+
+***** waveform
+#+BEGIN_SRC octave
+plot(vector);
+pname = "examples/plots/sine_sweep.png"; <<disp-fig>>
+#+END_SRC
+
+#+RESULTS:
+[[file:examples/plots/sine_sweep.png]]
+
+*** filter, inspect
+**** do the filtering, read back in
+#+BEGIN_SRC sh
+bin/run -i examples/inputs/sine_sweep.raw  -o examples/outputs/sine_sweep_filt.raw 
+#+END_SRC
+#+BEGIN_SRC octave
+vector = read_raw("examples/outputs/sine_sweep_filt.raw");
+#+END_SRC
+**** comparison of matlab filter output w/ our filter output
+**** spectrogram
+ #+BEGIN_SRC octave
+specgram(vector, nfft, Fs, window, overlap);
+pname = "examples/plots/sine_sweep_spectrogram.png"; <<disp-fig>>
+ #+END_SRC      
+** impulse
+*** setup
+#+BEGIN_SRC octave  
+imp_fname = "examples/inputs/impulse.raw";
+#+END_SRC
+*** create, write
+#+BEGIN_SRC octave
+imp = [1 zeros(1, 999)];
+write_raw(imp_fname, imp);
+#+END_SRC
+*** filter, read back in, check impulse response
+#+BEGIN_SRC sh
+bin/run -i examples/inputs/impulse.raw  -o examples/outputs/impulse_filt.raw 
+#+END_SRC
+***** read in
+#+BEGIN_SRC octave 
+vector = read_raw("examples/outputs/impulse_filt.raw");
+#+END_SRC
+
+***** matlab's filtered output
+#+BEGIN_SRC octave :results output
+MA_coefs = [1 0.5];  % numerator (b)
+% AR_coefs = [-1 -0.1];  % denominator (a)
+AR_coefs = [-1 -0.1];  % denominator (a)
+
+h = impz(MA_coefs, AR_coefs);
+h(1:5)
+#+END_SRC    
+
+\begin{bmatrix}
+1& 0.4 & -0.04 & 0.004 & -0.0004 & \dots\\
+\end{bmatrix} 
+** matlab
+#+BEGIN_SRC octave  
+MA_coefs = [0.5 0.5];
+AR_coefs = [1];
+[h, w] = freqz(MA_coefs, AR_coefs);
+#+END_SRC
+* running in gdb (in ~emacs~)
+#+BEGIN_SRC elisp 
+(gdb "gdb -i=mi bin/run")
+#+END_SRC
+
+and then, at the ~gdb~ prompt, source the file ~gdb_script~ below by typing 
+
+#+BEGIN_SRC sh
+source ../src/gdb-scripts/<name-of-script>
+#+END_SRC
+
+*** gdb scripts
+**** observing the filtering / convolution
+#+BEGIN_SRC sh :tangle gdb-scripts/watch-filter
+# b main.cc:79
+b Filt<double>::pull(double*, unsigned long)
+run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw 
+#+END_SRC
+* COMMENT Footer
+# Local Variables:
+# eval: (setq src-dir (expand-file-name "src/"))
+# eval: (local-set-key (kbd "<f5>") (lambda () (interactive) (shell-command "make clean && make &")))
+# End:

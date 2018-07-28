@@ -1,5 +1,3 @@
-#define STR_STDIN  "stdin"
-#define STR_STDOUT "stdout"
 #include "Filt.h"
 #include <stdio.h>
 #include <ctype.h>
@@ -10,8 +8,6 @@
 #include <string>
 #include <boost/program_options.hpp>
 
-namespace po = boost::program_options;
-
 int main(int argc, char** argv) {
 
   // variables to store parsed cmdl arguments in
@@ -20,6 +16,7 @@ int main(int argc, char** argv) {
   double sample_freq, frame_dur, win_dur;
   std::string in_file_str, out_file_str, coefs_file;
 
+  namespace po = boost::program_options;
   po::options_description po_general("General options");
   po::options_description po_all("Interface");
   po::options_description po_parameters("Parameters");
