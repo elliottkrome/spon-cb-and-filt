@@ -51,12 +51,12 @@ TEST_COMMAND_1 = $(EXEC) \
 ** targets
 *** default
 #+BEGIN_SRC makefile
-all: filter-main noise-main
+all: filt-main noise-main
 #+END_SRC
 *** run
 Sometimes I like to just type ~make run~, rather than typing ~make~ and then calling the executable manually
 #+BEGIN_SRC makefile
-run: filter-main
+run: filt-main
 	$(TEST_COMMAND_1)
 #+END_SRC
 *** calling valgrind
@@ -68,7 +68,7 @@ grind: main
 *** drivers
 **** filter driver
 #+BEGIN_SRC makefile
-filter-main: $(SRC_CLASS_DIR)/cb.h $(SRC_CLASS_DIR)/filt.h $(SRC_DRIVER_DIR)/filter-main.cc
+filt-main: $(SRC_CLASS_DIR)/cb.h $(SRC_CLASS_DIR)/filt.h $(SRC_DRIVER_DIR)/filt-main.cc
 	$(CC) $(CFLAGS) $(DEPS) $? -o $(EXEC) $(LDFLAGS)
 #+END_SRC
 **** noise driver
@@ -79,7 +79,7 @@ noise-main: $(SRC_CLASS_DIR)/noise.h $(SRC_DRIVER_DIR)/noise-main.cc
 *** tangling
 **** drivers
 #+BEGIN_SRC makefile 
-$(SRC_DRIVER_DIR)/%-main.cc: $(ORG_DRIVER_DIR)/%-main.org
+$(SRC_DRIVER_DIR)/%-main.cc: $(ORG_CLASS_DIR)/spon-%.org
 	emacs $< --batch -f org-babel-tangle --kill
 #+END_SRC
 **** classes

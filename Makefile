@@ -30,21 +30,21 @@ TEST_COMMAND_1 = $(EXEC) \
 	-i examples/inputs/sine_sweep.raw \
 	-o examples/outputs/sine_sweep_filt.raw
 
-all: filter-main noise-main
+all: filt-main noise-main
 
-run: filter-main
+run: filt-main
 	$(TEST_COMMAND_1)
 
 grind: main
 	valgrind -v $(TEST_COMMAND_1)
 
-filter-main: $(SRC_CLASS_DIR)/cb.h $(SRC_CLASS_DIR)/filt.h $(SRC_DRIVER_DIR)/filter-main.cc
+filt-main: $(SRC_CLASS_DIR)/cb.h $(SRC_CLASS_DIR)/filt.h $(SRC_DRIVER_DIR)/filt-main.cc
 	$(CC) $(CFLAGS) $(DEPS) $? -o $(EXEC) $(LDFLAGS)
 
 noise-main: $(SRC_CLASS_DIR)/noise.h $(SRC_DRIVER_DIR)/noise-main.cc
 	$(CC) $(CFLAGS) $(DEPS) $? -o $(BIN_DIR)/noise-test $(LDFLAGS)
 
-$(SRC_DRIVER_DIR)/%-main.cc: $(ORG_DRIVER_DIR)/%-main.org
+$(SRC_DRIVER_DIR)/%-main.cc: $(ORG_CLASS_DIR)/spon-%.org
 	emacs $< --batch -f org-babel-tangle --kill
 
 $(SRC_CLASS_DIR)/%.h: $(ORG_CLASS_DIR)/spon-%.org
