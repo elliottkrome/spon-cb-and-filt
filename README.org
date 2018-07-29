@@ -26,11 +26,11 @@ I really like how org-mode allows you to create a document that
 - contains multiple programming languages, where all are callable like python is from an IPython notebook.
 - has embedded latex, links, and images, and support for exporting code and literate programming.
 
-Think of ~spon-cb-and-filt.org~ as like an ~IPython~ or ~MATLAB~ notebook, except that it allows you to include ~C++~ (or, really, just about any language under the sun) alongside ~Python~ and or ~MATLAB~. 
+Think of ~spon-cb-and-filt.org~ as like an ~IPython~ or ~MATLAB~ notebook, except that it allows you to include ~C++~, ~sh~, ~xml~, (or, really, just about any language under the sun) alongside ~Python~ and or ~MATLAB~. 
 
 In general, one kind of place where this kind of document is useful is for exploring and implementing dsp-ish things where it isn't necessarily obvious how to verify correctness. In particular the ~spon-cb-and-filt.org~ document
 - does some dsp stuff in ~C++~ (convolution, basic ARMA filtering, etc.)
-- makes the project via ~Make~
+- makes an example executable via ~Make~
 - calls the resulting executable from a ~bash~ shell
 - (optionally) shows how to plug ~gdb~ into this executable, with a very rudimentary ~gdb~ script
 - reads the output into ~MATLAB~ / ~Octave~ and verifies correctness there.

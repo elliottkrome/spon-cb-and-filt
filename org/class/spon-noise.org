@@ -1,0 +1,117 @@
+* ~NoiseG~ - Gaussian NoiseG generator class
+:PROPERTIES:
+:header-args:  :tangle ../../src/class/noise.h
+:header-args+: :main no
+:END:
+** top matter
+#+BEGIN_SRC C++ :includes <iostream> 
+#include <random>
+#include <chrono>
+#+END_SRC
+** class definition
+
+#+BEGIN_SRC C++
+template<typename T>
+class NoiseG {
+ public:
+
+  static const char* name();
+
+  NoiseG();
+
+  bool pull(
+      T* array_a,
+      size_t size_a);
+
+ private:
+  double mean_d;
+  double var_d;
+  std::default_random_engine engine_d;
+  std::normal_distribution<T> dist_d;
+};
+#+end_src
+** implementation
+*** constructor, destructor
+#+begin_src c++
+template<typename T>
+NoiseG<T>::NoiseG() {
+  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  engine_d = std::default_random_engine(seed);
+  dist_d = std::normal_distribution<T>(0, 1); 
+}
+
+#+end_src
+*** ~pull~
+#+begin_src c++
+template<typename T>
+bool NoiseG<T>::pull(
+    T* array_a, 
+    size_t size_a) {
+ 
+  for (long i = 0; i < size_a; i++) {
+    array_a[i] = dist_d(engine_d);
+  }
+  return true;
+}
+#+END_SRC
+*** miscellaneous
+#+BEGIN_SRC C++
+template<typename T>
+const char* NoiseG<T>::name() {
+  return "NoiseG";
+}
+#+END_SRC
+* ~noise-main~ - a driver program for various ~Noise*~ classes
+:PROPERTIES:
+:header-args:  :tangle ../../src/driver/noise-main.cc
+:header-args+: :main no
+:END:
+** ~#include~ s and ~int main(int argc, char** argv)~
+#+BEGIN_SRC C++
+#include "noise.h"
+
+int main(int argc, char** argv) {
+#+END_SRC
+** setup
+#+BEGIN_SRC C++ 
+
+  FILE* out_file = fopen("examples/outputs/gaussian-noise.raw", "w");
+  unsigned buf_size = 1000;
+  double buf_out[buf_size];
+  NoiseG<double> noise;
+  unsigned nsamples = 16000;
+  unsigned nframes = nsamples / buf_size;
+#+END_SRC
+** actually outputting the stuff
+#+BEGIN_SRC C++ 
+  for(long i = 0; i < nframes; i++) {
+
+    if (noise.pull(buf_out, buf_size)) {
+      fwrite(buf_out, sizeof(double), buf_size, out_file);
+    } 
+  }
+}
+#+END_SRC
+* testing
+:PROPERTIES:
+:header-args:  :session
+:header-args+: :results file
+:header-args+: :noweb yes
+:header-args+: :results output silent
+:END:
+#+INCLUDE: "../oct-matlab-helpers.org"
+** read in
+#+BEGIN_SRC octave 
+vector = read_raw("examples/outputs/gaussian-noise.raw");
+#+END_SRC
+** listen
+#+BEGIN_SRC octave  
+player = audioplayer(vector, Fs, 16);  % compare to audioplayer(sweep, Fs, 16)
+play(player);
+#+END_SRC
+** plot
+#+BEGIN_SRC octave  
+plot(vector)
+#+END_SRC
+
+

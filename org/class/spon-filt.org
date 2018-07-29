@@ -1,162 +1,7 @@
-#+Title: circular buffer, ARMA filter
-* ~Cb~ - circular buffer class
-:PROPERTIES:
-:header-args:  :tangle src/Cb.h
-:header-args+: :main no
-:END:
-
-** top matter
-We use ~size_t~ from ~stdio.h~, although we don't really need to. 
-#+BEGIN_SRC C++ :includes <iostream> 
-#include <stdio.h>
-#+END_SRC
-** class definition
-This acts as a building block for other classes that actually do interesting things. As such, ~push~ and ~pull~ will be overridden by those classes, and are ~virtual~ here.
-
-Push and pull return booleans that indicate whether or not they have succeeded in their operations - if either the read pointer ~rptr~ or the ~wptr~ catch up to eachother, then these operations will return false to indicate that the buffer is either "full" or "empty", respectively.
-#+BEGIN_SRC C++
-template<typename T>
-class Cb {
- public:
-
-  static const char* name();
-
-  explicit Cb(size_t size_a);
-
-  ~Cb();
-
-  virtual bool push(
-      const T* array_a,
-      size_t size_a);
-
-  virtual bool pull(
-      T* array_a,
-      size_t size_a);
-
-  // protected:
-  size_t bsize;
-  T* buffer;
-
-  // read and write pointers:
-  //  rptr: next location where new data can be stored     (in)
-  //  wptr: next location where data to be written resides (out)
-  //
-  size_t rptr;
-  size_t wptr;
-  void debug();
-};
-#+END_SRC
-** implementation
-*** Constructor, Destructor
-#+BEGIN_SRC C++
-template<typename T>
-Cb<T>::Cb(size_t size_a) {
-  
-  bsize = size_a;        // store the buffer size
-  buffer = new T[bsize]; // create a buffer to store data
-
-  // initialize the read and write pointers
-  //
-  rptr = 0;         // set the read pointer to the beginning of the buffer
-  wptr = bsize - 1; // set the write pointer to the end of the buffer
-}
-
-template<typename T>
-Cb<T>::~Cb() {
-  delete[] buffer;
-}
-#+END_SRC
-*** ~push~
-#+BEGIN_SRC C++
-template<typename T>
-bool Cb<T>::push(const T* array_a, size_t size_a){
-
-  // loop over the input data
-  //
-  for (long i = 0; i < size_a; i++) {
-
-    // check for room on the circular buffer
-    // if it is final iteration, we are good to go, else return false
-    //  as we are trying to read into an index where there is data
-    //  that hasn't been processed yet
-    //
-    if (rptr == wptr) {
-
-      // if we have done a full loop and filled the buffer, then we can do more
-      //
-      if (i == size_a - 1) {
-	return true;
-      }
-
-      // if rptr has caught up with wptr and we haven't done a full loop, we
-      //  indicate this to the caller by returning false
-      //
-      else {
-	return false;
-      }
-    }
-    //
-    // end of room check
-
-    // if there is room left for more data to be read in, then do so
-    //  and advance the pointer, wrapping at end of memory
-    //
-    else {
-      buffer[rptr] = array_a[i];
-      rptr = (rptr + 1) % bsize;
-    }
-    //
-    // end of individual read
- 
-  }
-  return true;
-}
-#+END_SRC
-*** ~pull~
-#+BEGIN_SRC C++
-// This pulls data from the circular buffer to the output array.
-// If there is insufficient data available, it returns false.
-//
-template<typename T>
-bool Cb<T>::pull(T* array_a, size_t size_a) {
- 
-  // loop over the data and output
-  //
-  for (long i = 0; i < size_a; i++) {
-
-    // if wptr has caught up to rptr, there is insufficient data
-    //
-    if (wptr == rptr)
-      return false;
-
-    wptr = (wptr + 1) % bsize;
-    array_a[i] = buffer[wptr];
-  }
-  return true;
-}
-#+END_SRC
-*** miscellaneous
-#+BEGIN_SRC C++
-template<typename T>
-const char* Cb<T>::name() {
-  return "Cb";
-}
-/*
-template<typename T>
-void Cb<T>::debug() {
-  std::cerr << "<---" << this->name() << " %s --->" << std::endl;
-  std::cerr << " read pointer = " << rptr << " write pointer = " << wptr << std::endl;
-  std::cerr << " buffer[] = ";
-  for (long i = 0; i < bsize; i++) {
-    std::cerr << buffer[i];
-  } std::cerr << std::endl;
-  std::cerr << "<--- done --->\n" << std::endl;
-}
-*/
-#+END_SRC
+#+TITLE: ARMA Filter
 * ~Filt~ - ARMA filter class
 :PROPERTIES:
-:header-args:  :tangle src/Filt.h
+:header-args:  :tangle ../../src/class/filt.h
 :header-args+: :main no
 :END:
 ** mathematical background
@@ -207,12 +52,13 @@ $y[n]$ is the output of the right-hand summer:
 \begin{align*}
 y[n] 
   &= \sum\limits_{j=0}^{j=q}b[j] w[n-j] \\
-  &= \sum\limits_{j=0}^{j=q}b[j]\dot \Bigg[x[n-j] - \sum\limits_{i=1}^{i=p}a[i]  w[n-i-j]\Bigg] \\
+  &= \sum\limits_{j=0}^{j=q}b[j]\cdot \Bigg[ x[n-j] - \sum\limits_{i=1}^{i=p}a[i]  w[n-i-j]\Bigg] \\
   &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{j=0}^{j=q}\sum\limits_{i=1}^{i=p}b[j] a[i]  w[n-j-i]\\
-  &= \\
+  &\qquad\text{// rearranging the double summation} \\
+  &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{i=1}^{i=p} a[i] \sum\limits_{j=0}^{j=q}b[j] w[n-j-i]\\
   &\qquad\text{// similarly to the above case of } w[n-\heartsuit] \\
   &\qquad\text{// }y[n-\heartsuit] = \sum\limits_{j=0}^{j=q}b[j] w[n-j-\heartsuit]\text{, so:} \\
-  &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{i=1}^{i=p} a[i] \underbrace{\sum\limits_{j=0}^{j=q}b[j] w[n-j-i]}_{\text{this is }y[n-i]}\\
+  &= \sum\limits_{j=0}^{j=q}b[j] x[n-j] - \sum\limits_{i=1}^{i=p} a[i] \overbrace{\sum\limits_{j=0}^{j=q}b[j] w[n-j-i]}^{\text{this is }y[n-i]}\\
   &=\sum\limits_{j=0}^{j=q}b[j]  x[n - j] -\sum\limits_{i=1}^{i=p}a[i]  y[n-i]\\
 \end{align*}
 and we have derived our difference equation.
@@ -235,7 +81,7 @@ Y(z)\Big(1 + \sum\limits_{i=1}^{i=p}a[i]Y(z)z^{-i}\Big)
 ** top matter
 This class inherits from the circular buffer class ~Cb~, so we include that. We reuse most of the internals, just reimplemeting ~pull~ so that data is filtered as it is pulled off the buffer, as well as adding methods ~set_filter~ and ~reset_mem~.
 #+BEGIN_SRC C++
-#include "Cb.h"
+#include "cb.h"
 #+END_SRC
 
 
@@ -415,166 +261,6 @@ bool Filt<T>::reset_mem() {
   return true;
 }
 #+END_SRC
-* ~main~ - a driver program
-:PROPERTIES:
-:header-args:  :tangle src/main.cc
-:header-args+: :main no
-:END:
-** ~#include~ s and ~int main(int argc, char** argv)~
-#+BEGIN_SRC C++
-#include "Filt.h"
-#include <stdio.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <math.h>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <boost/program_options.hpp>
-
-int main(int argc, char** argv) {
-#+END_SRC
-** ~boost::program_options~ 
-#+BEGIN_SRC C++ 
-  // variables to store parsed cmdl arguments in
-  //
-  bool help_flag, unspecified_io;
-  double sample_freq, frame_dur, win_dur;
-  std::string in_file_str, out_file_str, coefs_file;
-
-  namespace po = boost::program_options;
-  po::options_description po_general("General options");
-  po::options_description po_all("Interface");
-  po::options_description po_parameters("Parameters");
-  po::options_description po_io("I/O:    (must specify)");
-
-  po_general.add_options()
-    ("help,h",     "produce this help message and exit");
-  po_io.add_options()
-    ("in-file,i",  po::value<std::string>(&in_file_str)->default_value(""), "file to process")
-    ("out-file,o", po::value<std::string>(&out_file_str)->default_value(""), "file to output");    
-  po_parameters.add_options()
-    ("samp-freq,s",  po::value<double>(&sample_freq)->default_value(8000), "sampling frequency (samps / secs)")
-    ("frame-dur,f",  po::value<double>(&frame_dur)->default_value(0.02, "0.02"),   "frame duration     (secs)")
-    ("window-dur,w", po::value<double>(&win_dur)->default_value(0.04, "0.04"),     "window duration    (secs)")
-    ("coefs-file,c", po::value<std::string>(&coefs_file)->default_value("none"), "filter coefficient file");    
-
-  po_all.add(po_general).add(po_parameters).add(po_io);
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, po_all), vm);
-
-  po::notify(vm);
-
-  if (unspecified_io = (in_file_str.empty() || out_file_str.empty())) {
-    std::cout << "\n unspecified input and / or output. \n\n";
-  }
-  if (vm.count("help") || unspecified_io) {
-    std::cout << po_all;
-    exit(0);
-  }
-#+END_SRC
-** setup
-#+BEGIN_SRC C++ 
-  FILE* in_file = fopen(in_file_str.c_str(), "r");
-  FILE* out_file = fopen(out_file_str.c_str(), "w");
-
-  long M = frame_dur * sample_freq; // number of samples in window
-  long N = win_dur   * sample_freq; // number of samples in frame
-
-  double buf_in[M];   // define a buffer to hold the data from data in 
-  double buf_out[M];  // define a buffer to hold the output data 
-
-  long nsamples_read, nsamples_write, n = 0;
-
-  // create a circular buffer
-  //
-  Filt<double> filter(N, N);  
-  double MA_coefs[10] = {1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0};
-  double AR_coefs[10] = {-1, -0.1, 0, 0, 0, 0, 0, 0, 0, 0};
-  filter.set_filter(AR_coefs, 10, MA_coefs, 10);
-#+END_SRC
-** running the filter
-#+BEGIN_SRC C++ 
-  while ((nsamples_read = fread(buf_in, sizeof(double), M, in_file)) > 0) {
-
-    filter.push(buf_in, nsamples_read);
-    
-    if (filter.pull(buf_out, M)) {
-      nsamples_write = fwrite(buf_out, sizeof(double), M, out_file);
-    } 
-  }
-
-  // flush
-  //
-  filter.pull(buf_out, nsamples_read);
-  fwrite(buf_out, sizeof(double), nsamples_read, out_file);
-  return true;
-}
-#+END_SRC
-* ~Makefile~, valgrind
-:PROPERTIES:
-:header-args: :tangle Makefile
-:END:
-** directory setup
-some basic variables.
-#+BEGIN_SRC makefile
-BDIR=bin
-SDIR=src
-EXAMPLE_DIR=examples
-EXEC=$(BDIR)/run
-#+END_SRC
-It is probably sloth, but I prefer to use boost's command-line options rather than parsing the command line myself.
-#+BEGIN_SRC makefile
-BOOST_ROOT = /usr/local/opt/boost
-BOOST_INCS = $(BOOST_ROOT)/include/boost/include
-BOOST_LIBS = $(BOOST_ROOT)/lib/
-#+END_SRC
-** compiler setup
-#+BEGIN_SRC makefile
-CC = g++-7
-CFLAGS += -g -std=c++11
-LDFLAGS= -L$(BOOST_LIBS) -lboost_program_options
-#+END_SRC
-** dependencies, headers
-#+BEGIN_SRC makefile
-HEADERS = $(wildcard $(SDIR)/*.h)
-DEPS    = $(HEADERS)
-DEPS += -I$(BOOST_INCS)
-#+END_SRC
-** test command
-#+BEGIN_SRC makefile 
-TEST_COMMAND_1 = $(EXEC) \
-	-i examples/inputs/sine_sweep.raw \
-	-o examples/outputs/sine_sweep_filt.raw
-#+END_SRC
-** targets
-*** default
-#+BEGIN_SRC makefile
-all: main
-#+END_SRC
-*** run
-Sometimes I like to just type ~make run~, rather than typing ~make~ and then calling the executable manually
-#+BEGIN_SRC makefile
-run: main
-	$(TEST_COMMAND_1)
-#+END_SRC
-*** calling valgrind
-Sometimes I like to be able to rebuild and call valgrind without remembering how to set it up. This is obviously a very simple setup for valgrind, but it is easy to make it more interesting.
-#+BEGIN_SRC makefile
-grind: main
-	valgrind -v $(TEST_COMMAND_1) 
-#+END_SRC
-*** main
-#+BEGIN_SRC makefile
-main:
-	$(CC) $(CFLAGS) $(DEPS) $(SDIR)/main.cc $^ -o $(EXEC)  $(LDFLAGS)
-#+END_SRC
-*** clean
-#+BEGIN_SRC makefile
-clean:
-	rm -f $(EXEC)
-#+END_SRC
 * testing
 :PROPERTIES:
 :header-args:  :session
@@ -737,13 +423,8 @@ source ../src/gdb-scripts/<name-of-script>
 
 *** gdb scripts
 **** observing the filtering / convolution
-#+BEGIN_SRC sh :tangle gdb-scripts/watch-filter
+#+BEGIN_SRC sh :tangle ../../gdb-scripts/watch-filter
 # b main.cc:79
 b Filt<double>::pull(double*, unsigned long)
 run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw 
 #+END_SRC
-* COMMENT Footer
-# Local Variables:
-# eval: (setq src-dir (expand-file-name "src/"))
-# eval: (local-set-key (kbd "<f5>") (lambda () (interactive) (shell-command "make clean && make &")))
-# End:

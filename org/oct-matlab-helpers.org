@@ -1,0 +1,39 @@
+** helpers
+:PROPERTIES:
+:header-args:  :session
+:header-args+: :results file
+:header-args+: :noweb yes
+:header-args+: :results output silent
+:END:
+*** ~MATLAB~ / ~Octave~: read / write ~.raw~ files
+We indicate the format via the string ~"double"~ - we are using 32-bit floats.
+
+#+BEGIN_SRC octave  
+global format_string = "double"
+#+END_SRC
+
+Here are some simple functions to manage i/o:
+#+BEGIN_SRC octave
+function vector = write_raw(filename_a, data_a)
+  global format_string
+  fid = fopen(filename_a, "w");
+  vector = fwrite(fid, data_a, format_string);
+  fclose(fid);
+end
+
+function vector = read_raw(filename_a)
+  global format_string
+  fid = fopen(filename_a, "r");
+  vector = fread(fid, Inf, format_string);
+  fclose(fid);
+end
+#+END_SRC
+
+*** helper snippet for plotting in emacs
+This is a little snippet so that the plots will show up embedded under the ~#+RESULTS:~ associated with their plotting code.
+It needs the name of the plot file to already be in the workspace as `pname'
+#+Name: disp-fig
+#+BEGIN_SRC octave 
+print(pname, "-dpng"); ans = pname;
+#+END_SRC
+

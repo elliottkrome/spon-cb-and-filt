@@ -1,12 +1,19 @@
-#include <iostream>
-
-
-
-
-
-
+#+Title: circular buffer
+* ~Cb~ - circular buffer class
+:PROPERTIES:
+:header-args:  :tangle ../../src/class/cb.h
+:header-args+: :main no
+:END:
+** top matter
+We use ~size_t~ from ~stdio.h~, although we don't really need to. 
+#+BEGIN_SRC C++ :includes <iostream> 
 #include <stdio.h>
+#+END_SRC
+** class definition
+This acts as a building block for other classes that actually do interesting things. As such, ~push~ and ~pull~ will be overridden by those classes, and are ~virtual~ here.
 
+Push and pull return booleans that indicate whether or not they have succeeded in their operations - if either the read pointer ~rptr~ or the ~wptr~ catch up to eachother, then these operations will return false to indicate that the buffer is either "full" or "empty", respectively.
+#+BEGIN_SRC C++
 template<typename T>
 class Cb {
  public:
@@ -37,7 +44,10 @@ class Cb {
   size_t wptr;
   void debug();
 };
-
+#+END_SRC
+** implementation
+*** Constructor, Destructor
+#+BEGIN_SRC C++
 template<typename T>
 Cb<T>::Cb(size_t size_a) {
   
@@ -54,7 +64,9 @@ template<typename T>
 Cb<T>::~Cb() {
   delete[] buffer;
 }
-
+#+END_SRC
+*** ~push~
+#+BEGIN_SRC C++
 template<typename T>
 bool Cb<T>::push(const T* array_a, size_t size_a){
 
@@ -98,7 +110,9 @@ bool Cb<T>::push(const T* array_a, size_t size_a){
   }
   return true;
 }
-
+#+END_SRC
+*** ~pull~
+#+BEGIN_SRC C++
 // This pulls data from the circular buffer to the output array.
 // If there is insufficient data available, it returns false.
 //
@@ -119,7 +133,9 @@ bool Cb<T>::pull(T* array_a, size_t size_a) {
   }
   return true;
 }
-
+#+END_SRC
+*** miscellaneous
+#+BEGIN_SRC C++
 template<typename T>
 const char* Cb<T>::name() {
   return "Cb";
@@ -136,3 +152,4 @@ void Cb<T>::debug() {
   std::cerr << "<--- done --->\n" << std::endl;
 }
 */
+#+END_SRC

@@ -1,0 +1,101 @@
+
+* ~Makefile~, valgrind
+:PROPERTIES:
+:header-args: :tangle Makefile
+:END:
+** directory setup
+some basic variables.
+#+BEGIN_SRC makefile
+BIN_DIR        = bin
+EXAMPLE_DIR    = examples
+
+ORG_BASE_DIR   = org
+ORG_CLASS_DIR  = $(ORG_BASE_DIR)/class
+ORG_DRIVER_DIR = $(ORG_BASE_DIR)/driver
+
+SRC_BASE_DIR   = src
+SRC_CLASS_DIR  = $(SRC_BASE_DIR)/class
+SRC_DRIVER_DIR  = $(SRC_BASE_DIR)/driver
+
+
+EXEC=$(BIN_DIR)/run
+#+END_SRC
+It is probably sloth, but I prefer to use boost's command-line options rather than parsing the command line myself.
+#+BEGIN_SRC makefile
+BOOST_ROOT = /usr/local/opt/boost
+BOOST_INCS = $(BOOST_ROOT)/include/boost/include
+BOOST_LIBS = $(BOOST_ROOT)/lib/
+#+END_SRC
+** compiler setup
+#+BEGIN_SRC makefile
+CC = g++-7
+CFLAGS += -g -std=c++11
+LDFLAGS= -L$(BOOST_LIBS) -lboost_program_options
+#+END_SRC
+** tangle command
+#+BEGIN_SRC makefile 
+TANGLE_PREFIX = emacs --batch -l org  --no-init-file
+TANGLE_SUFFIX = -f org-babel-tangle --kill
+#+END_SRC
+** dependencies, 
+#+BEGIN_SRC makefile
+DEPS += -I$(BOOST_INCS)
+DEPS += -I$(SRC_CLASS_DIR)
+#+END_SRC
+** test command
+#+BEGIN_SRC makefile 
+TEST_COMMAND_1 = $(EXEC) \
+	-i examples/inputs/sine_sweep.raw \
+	-o examples/outputs/sine_sweep_filt.raw
+#+END_SRC
+** targets
+*** default
+#+BEGIN_SRC makefile
+all: filter-main noise-main
+#+END_SRC
+*** run
+Sometimes I like to just type ~make run~, rather than typing ~make~ and then calling the executable manually
+#+BEGIN_SRC makefile
+run: filter-main
+	$(TEST_COMMAND_1)
+#+END_SRC
+*** calling valgrind
+Sometimes I like to be able to rebuild and call valgrind without remembering how to set it up. This is obviously a very simple setup for valgrind, but it is easy to make it more interesting.
+#+BEGIN_SRC makefile
+grind: main
+	valgrind -v $(TEST_COMMAND_1) 
+#+END_SRC
+*** drivers
+**** filter driver
+#+BEGIN_SRC makefile
+filter-main: $(SRC_CLASS_DIR)/cb.h $(SRC_CLASS_DIR)/filt.h $(SRC_DRIVER_DIR)/filter-main.cc
+	$(CC) $(CFLAGS) $(DEPS) $? -o $(EXEC) $(LDFLAGS)
+#+END_SRC
+**** noise driver
+#+BEGIN_SRC makefile
+noise-main: $(SRC_CLASS_DIR)/noise.h $(SRC_DRIVER_DIR)/noise-main.cc
+	$(CC) $(CFLAGS) $(DEPS) $? -o $(BIN_DIR)/noise-test $(LDFLAGS)
+#+END_SRC
+*** tangling
+**** drivers
+#+BEGIN_SRC makefile 
+$(SRC_DRIVER_DIR)/%-main.cc: $(ORG_DRIVER_DIR)/%-main.org
+	emacs $< --batch -f org-babel-tangle --kill
+#+END_SRC
+**** classes
+#+BEGIN_SRC makefile 
+$(SRC_CLASS_DIR)/%.h: $(ORG_CLASS_DIR)/spon-%.org
+	emacs $< --batch -f org-babel-tangle --kill
+#+END_SRC
+*** clean
+#+BEGIN_SRC makefile
+clean:
+	rm -f $(EXEC)
+#+END_SRC
+
+* COMMENT Footer
+# Local Variables:
+# eval: (setq spon-base-dir default-directory)
+# eval: (setq spon-src-dir (expand-file-name "src/"))
+# eval: (local-set-key (kbd "<f5>") (lambda () (cd spon-base-dir) (interactive) (shell-command "make clean && make &")))
+# End:
