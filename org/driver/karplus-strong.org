@@ -1,0 +1,98 @@
+* ~Karplus-Strong~ - a program demonstrating Karplus-Strong string synthesis
+:PROPERTIES:
+:header-args:  :tangle ../../src/driver/karplus-strong.cc
+:header-args+: :main no
+:END:
+
+** block diagram (from [[https://en.wikipedia.org/wiki/Karplus%E2%80%93Strong_string_synthesis][Wikipedia]])
+[[file:../../resources/images/~Karplus-Strong~_-_a_program_demonstrating_Karplus-Strong_string_synthesis/karplus_strong_2018-07-29_18-13-29.png]]
+
+** ~#include~ s and ~int main(int argc, char** argv)~
+#+BEGIN_SRC C++
+#include "filt.h"
+#include "noise.h"
+#include "cb.h"
+#include <boost/program_options.hpp>
+
+int main(int argc, char** argv) {
+#+END_SRC
+** ~boost::program_options~ 
+#+BEGIN_SRC C++ 
+  // variables to store parsed cmdl arguments in
+  //
+  bool help_flag, unspecified_io;
+  double sample_freq, fundamental;
+  std::string out_file_str, coefs_file;
+
+  namespace po = boost::program_options;
+  po::options_description po_general("General options");
+  po::options_description po_all("Interface");
+  po::options_description po_parameters("Parameters");
+  po::options_description po_io("I/O:    (must specify)");
+
+  po_general.add_options()
+    ("help,h",     "produce this help message and exit");
+  po_io.add_options()
+    ("out-file,o", po::value<std::string>(&out_file_str)->default_value(""), "file to output");    
+  po_parameters.add_options()
+    ("sampling-freq,s",  po::value<double>(&sample_freq)->default_value(8000), "sampling frequency (samps / secs)")
+    ("fundamental-freq,f",  po::value<double>(&fundamental)->default_value(0.02, "0.02"),   "frame duration     (secs)")
+    ("coefs-file,c", po::value<std::string>(&coefs_file)->default_value("none"), "filter coefficient file");    
+
+  po_all.add(po_general).add(po_parameters).add(po_io);
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, po_all), vm);
+
+  po::notify(vm);
+
+  if (unspecified_io = (out_file_str.empty())) {
+    std::cout << "\n unspecified input and / or output. \n\n";
+  }
+  if (vm.count("help") || unspecified_io) {
+    std::cout << po_all;
+    exit(0);
+  }
+#+END_SRC
+** setup
+#+BEGIN_SRC C++ 
+  FILE* out_file = fopen(out_file_str.c_str(), "w");
+
+  long M = 320; // window duration
+  long N = 160; // frame duration
+
+  double buf_in[M];   // define a buffer to hold the data from data in 
+  double buf_out[M];  // define a buffer to hold the output data 
+
+  long nsamples_read, nsamples_write, n = 0;
+
+  // create a circular buffer
+  //
+  Filt<double> filter(N, N);  
+  NoiseG<double> noise();
+Cb<double> summer()
+  double MA_coefs[10] = {1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0};
+  double AR_coefs[10] = {-1, -0.1, 0, 0, 0, 0, 0, 0, 0, 0};
+  filter.set_filter(AR_coefs, 10, MA_coefs, 10);
+
+
+#+END_SRC
+** running the filter
+#+BEGIN_SRC C++ 
+  while ((nsamples_read = fread(buf_in, sizeof(double), M, in_file)) > 0) {
+
+    filter.push(buf_in, nsamples_read);
+    
+    if (filter.pull(buf_out, M)) {
+      nsamples_write = fwrite(buf_out, sizeof(double), M, out_file);
+    } 
+  }
+
+  // flush
+  //
+  filter.pull(buf_out, nsamples_read);
+  fwrite(buf_out, sizeof(double), nsamples_read, out_file);
+  return true;
+}
+#+END_SRC
+ 
