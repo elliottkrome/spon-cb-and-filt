@@ -1,4 +1,12 @@
+#include <iostream>
 
+
+
+
+
+
+#ifndef SPON_CB
+#define SPON_CB
 #include <stdio.h>
 
 template<typename T>
@@ -66,14 +74,14 @@ bool Cb<T>::push(const T* array_a, size_t size_a){
       // if we have done a full loop and filled the buffer, then we can do more
       //
       if (i == size_a - 1) {
-        return true;
+	return true;
       }
 
       // if rptr has caught up with wptr and we haven't done a full loop, we
       //  indicate this to the caller by returning false
       //
       else {
-        return false;
+	return false;
       }
     }
     //
@@ -130,3 +138,5 @@ void Cb<T>::debug() {
   std::cerr << "<--- done --->\n" << std::endl;
 }
 */
+
+#endif  // SPON_CB

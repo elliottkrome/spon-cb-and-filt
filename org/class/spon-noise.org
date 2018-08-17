@@ -1,10 +1,10 @@
 * ~NoiseG~ - Gaussian NoiseG generator class
 :PROPERTIES:
-:header-args:  :tangle ../../src/class/noise.h
+:header-args:  :tangle (concat spon-filt-base-dir "src/class/noise.h")
 :header-args+: :main no
 :END:
 ** top matter
-#+BEGIN_SRC C++ :includes <iostream> 
+#+BEGIN_SRC C++ :includes
 #include <random>
 #include <chrono>
 #+END_SRC
@@ -32,17 +32,16 @@ class NoiseG {
 #+end_src
 ** implementation
 *** constructor, destructor
-#+begin_src c++
+#+BEGIN_SRC C++
 template<typename T>
 NoiseG<T>::NoiseG() {
   unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   engine_d = std::default_random_engine(seed);
   dist_d = std::normal_distribution<T>(0, 1); 
 }
-
-#+end_src
+#+END_SRC
 *** ~pull~
-#+begin_src c++
+#+BEGIN_SRC C++
 template<typename T>
 bool NoiseG<T>::pull(
     T* array_a, 

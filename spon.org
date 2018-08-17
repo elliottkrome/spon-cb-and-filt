@@ -15,8 +15,11 @@ ORG_DRIVER_DIR = $(ORG_BASE_DIR)/driver
 
 SRC_BASE_DIR   = src
 SRC_CLASS_DIR  = $(SRC_BASE_DIR)/class
-SRC_DRIVER_DIR  = $(SRC_BASE_DIR)/driver
+SRC_DRIVER_DIR = $(SRC_BASE_DIR)/driver
 
+THIRD_PARTY    = third-party
+THIRD_PARTY_INCLUDE = $(THIRD_PARTY)/include
+THIRD_PARTY_LIB = $(THIRD_PARTY)/lib
 
 EXEC=$(BIN_DIR)/run
 #+END_SRC
@@ -30,23 +33,27 @@ BOOST_LIBS = $(BOOST_ROOT)/lib/
 #+BEGIN_SRC makefile
 CC = g++-7
 CFLAGS += -g -std=c++11
-LDFLAGS= -L$(BOOST_LIBS) -lboost_program_options
+LDFLAGS += -L$(BOOST_LIBS) -lboost_program_options
+LDFLAGS += -L$(THIRD_PARTY_LIB) -ltinyxml2
 #+END_SRC
 ** tangle command
 #+BEGIN_SRC makefile 
-TANGLE_PREFIX = emacs --batch -l org  --no-init-file
-TANGLE_SUFFIX = -f org-babel-tangle --kill
+SPON_BASE_DIR_BATCH_MODE = --eval "(setq spon-filt-base-dir (locate-dominating-file buffer-file-name \".dir-locals.el\"))"
+TANGLE_BATCH_SUFFIX = --batch -l org $(SPON_BASE_DIR_BATCH_MODE) -f org-babel-tangle --kill
+
 #+END_SRC
 ** dependencies, 
 #+BEGIN_SRC makefile
 DEPS += -I$(BOOST_INCS)
 DEPS += -I$(SRC_CLASS_DIR)
+DEPS += -I$(THIRD_PARTY_INCLUDE)
 #+END_SRC
 ** test command
 #+BEGIN_SRC makefile 
 TEST_COMMAND_1 = $(EXEC) \
+	-c examples/filters/low-pass-00.xml \
 	-i examples/inputs/sine_sweep.raw \
-	-o examples/outputs/sine_sweep_filt.raw
+	-o examples/outputs/sine_sweep_filt.raw\
 #+END_SRC
 ** targets
 *** default
@@ -80,17 +87,71 @@ noise-main: $(SRC_CLASS_DIR)/noise.h $(SRC_DRIVER_DIR)/noise-main.cc
 **** drivers
 #+BEGIN_SRC makefile 
 $(SRC_DRIVER_DIR)/%-main.cc: $(ORG_CLASS_DIR)/spon-%.org
-	emacs $< --batch -f org-babel-tangle --kill
+	emacs $< $(TANGLE_BATCH_SUFFIX) # --batch -f org-babel-tangle --kill
 #+END_SRC
 **** classes
 #+BEGIN_SRC makefile 
 $(SRC_CLASS_DIR)/%.h: $(ORG_CLASS_DIR)/spon-%.org
-	emacs $< --batch -f org-babel-tangle --kill
+	emacs $< $(TANGLE_BATCH_SUFFIX) # --batch -f org-babel-tangle --kill
+#+END_SRC
+*** third-party
+**** generic target
+#+BEGIN_SRC makefile 
+third-party: tiny-xml gtest
+clean-third-party:
+	rm -f third-party/include/*
+	rm -f third-party/lib/*
+#+END_SRC
+**** sub-targets
+***** ~tiny-xml~
+#+BEGIN_SRC makefile 
+tiny-xml:
+	cd third-party/tinyxml2              && \
+	$(CC) -c -o tinyxml2.o tinyxml2.cpp  && \
+	ar cr libtinyxml2.a tinyxml2.o       && \
+	cp libtinyxml2.a ../lib              && \
+	cp tinyxml2.h ../include
+#+END_SRC
+***** ~gtest~
+#+BEGIN_SRC makefile
+GTEST_CMAKE_FLAGS = -DCMAKE_CXX_COMPILER="$(CC)" -DCMAKE_CXX_FLAGS="-std=c++11" -stdlib=libc++
+gtest:
+	cd third-party/googletest                  && \
+	cmake $(GTEST_CMAKE_FLAGS) .               && \
+	make                                       && \
+	cp -a googletest/include/gtest ../include  && \
+	cp googlemock/gtest/libgtest.a ../lib      && \
+	cp googlemock/gtest/libgtest_main.a ../lib
+
 #+END_SRC
 *** clean
 #+BEGIN_SRC makefile
 clean:
 	rm -f $(EXEC)
+#+END_SRC
+
+* running in gdb (in ~emacs~)
+:PROPERTIES:
+:header-args: :results none
+:END:
+#+BEGIN_SRC elisp x1
+(gdb "gdb -i=mi bin/run")
+#+END_SRC
+
+and then, at the ~gdb~ prompt, source the file ~gdb_script~ below by typing 
+
+#+BEGIN_SRC sh
+source ../src/gdb-scripts/<name-of-script>
+#+END_SRC
+
+*** gdb scripts
+**** observing the filtering / convolution
+#+BEGIN_SRC sh :tangle (concat spon-filt-base-dir "gdb-scripts/watch-filter")
+# b Filt<double>::from_xmbl(tinyxml2::XMLElement*)
+# b Filt<double>::pull(double*, size_t)
+b main.cc:71
+# b Filt<double>::pull(double*, unsigned long)
+run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw -c ../examples/filters/low-pass-00.xml
 #+END_SRC
 
 * COMMENT Footer

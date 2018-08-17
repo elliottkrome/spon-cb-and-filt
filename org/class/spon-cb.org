@@ -1,12 +1,14 @@
 #+Title: circular buffer
 * ~Cb~ - circular buffer class
 :PROPERTIES:
-:header-args:  :tangle ../../src/class/cb.h
+:header-args:  :tangle (concat spon-filt-base-dir "src/class/cb.h")
 :header-args+: :main no
 :END:
 ** top matter
 We use ~size_t~ from ~stdio.h~, although we don't really need to. 
 #+BEGIN_SRC C++ :includes <iostream> 
+#ifndef SPON_CB
+#define SPON_CB
 #include <stdio.h>
 #+END_SRC
 ** class definition
@@ -152,4 +154,8 @@ void Cb<T>::debug() {
   std::cerr << "<--- done --->\n" << std::endl;
 }
 */
+#+END_SRC
+** end matter
+#+BEGIN_SRC C++ 
+#endif  // SPON_CB
 #+END_SRC

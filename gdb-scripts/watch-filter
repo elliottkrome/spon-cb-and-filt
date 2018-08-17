@@ -1,4 +1,5 @@
-
-# b main.cc:79
-b Filt<double>::pull(double*, unsigned long)
-run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw
+# b Filt<double>::from_xmbl(tinyxml2::XMLElement*)
+# b Filt<double>::pull(double*, size_t)
+b main.cc:71
+# b Filt<double>::pull(double*, unsigned long)
+run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw -c ../examples/filters/low-pass-00.xml

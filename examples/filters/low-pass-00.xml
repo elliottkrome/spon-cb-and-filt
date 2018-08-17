@@ -1,8 +1,4 @@
-<ir-filter numAR="10" numMA="10">
-  <AR>
-    "1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0"
-  </AR>
-  <MA>
-    "1, 0, 0, 0, 0, 0, 0, 0, 0, 0"
-  </MA>
+<ir-filter numAR="2" numMA="2">
+  <AR>1 0.5</AR>
+  <MA>-1 -0.1</MA>
 </ir-filter>

@@ -1,5 +1,10 @@
+#ifndef SPON_FILT
+#define SPON_FILT
 
 #include "cb.h"
+#include "tinyxml2.h"
+#include <vector>
+#include <sstream>
 
 template<typename T>
 class Filt : public Cb<T> {
@@ -25,6 +30,10 @@ class Filt : public Cb<T> {
       const T* b,  // moving average (MA) filter coefficients
       size_t   q); // number of MA coefficients -in
 
+  bool from_xml(tinyxml2::XMLElement* elem);
+  bool array_from_xml_pchar(
+      T* array_to_fill_a,
+      const char* array_to_parse_a);
  private:
   long filter_ptr_d;
   long max_mem_d;
@@ -166,3 +175,42 @@ bool Filt<T>::reset_mem() {
   }
   return true;
 }
+
+#include <iostream>
+template<typename T>
+bool Filt<T>::from_xml(tinyxml2::XMLElement* elem_a) {
+  const char* n_ar = elem_a->Attribute("numAR");
+  const char* n_ma = elem_a->Attribute("numMA");
+  const char* AR = elem_a->FirstChildElement("AR")->GetText();
+  const char* MA = elem_a->FirstChildElement("MA")->GetText();
+
+  if (n_ar == NULL ||
+      n_ma == NULL ||
+      AR   == NULL ||
+      MA   == NULL) {
+    return false;
+  }
+
+  array_from_xml_pchar(AR_coefs_d, AR) &&
+  array_from_xml_pchar(MA_coefs_d, MA);
+
+  for (int i = 0; i < 2; i++) {
+    std::cout << MA_coefs_d[i] << std::endl;
+  }
+}
+// TODO: all of this is sloppy
+// where should it go?
+template<typename T>
+bool Filt<T>::array_from_xml_pchar(
+    T* array_to_fill_a,
+    const char* array_to_parse_a) {
+  double temp_val;
+  unsigned index = 0;
+  std::istringstream ss(array_to_parse_a);
+  while(ss >> temp_val && index < max_mem_d) {
+    array_to_fill_a[index] = temp_val;
+    index++;
+  }
+}
+
+#endif  // SPON_FILT

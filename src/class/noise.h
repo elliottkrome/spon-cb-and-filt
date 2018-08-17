@@ -1,4 +1,3 @@
-
 #include <random>
 #include <chrono>
 
@@ -22,11 +21,6 @@ class NoiseG {
 };
 
 template<typename T>
-const char* NoiseG<T>::name() {
-  return "NoiseG";
-}
-
-template<typename T>
 NoiseG<T>::NoiseG() {
   unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   engine_d = std::default_random_engine(seed);
@@ -42,4 +36,9 @@ bool NoiseG<T>::pull(
     array_a[i] = dist_d(engine_d);
   }
   return true;
+}
+
+template<typename T>
+const char* NoiseG<T>::name() {
+  return "NoiseG";
 }

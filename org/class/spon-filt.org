@@ -1,7 +1,7 @@
 #+TITLE: ARMA Filter
 * ~Filt~ - ARMA filter class
 :PROPERTIES:
-:header-args:  :tangle ../../src/class/filt.h
+:header-args:  :tangle (concat (concat spon-filt-base-dir "src/class/filt.h"))
 :header-args+: :main no
 :END:
 ** mathematical background
@@ -83,7 +83,13 @@ Y(z)\Big(1 + \sum\limits_{i=1}^{i=p}a[i]Y(z)z^{-i}\Big)
 ** top matter
 This class inherits from the circular buffer class ~Cb~, so we include that. We reuse most of the internals, just reimplemeting ~pull~ so that data is filtered as it is pulled off the buffer, as well as adding methods ~set_filter~ and ~reset_mem~.
 #+BEGIN_SRC C++
+#ifndef SPON_FILT
+#define SPON_FILT
+
 #include "cb.h"
+#include "tinyxml2.h"
+#include <vector>
+#include <sstream>
 #+END_SRC
 
 ** definition
@@ -112,7 +118,10 @@ class Filt : public Cb<T> {
       const T* b,  // moving average (MA) filter coefficients
       size_t   q); // number of MA coefficients -in
 
-  bool from_xml()
+  bool from_xml(tinyxml2::XMLElement* elem);
+  size_t array_from_xml_pchar(
+      T* array_to_fill_a,
+      const char* array_to_parse_a);
  private:
   long filter_ptr_d;
   long max_mem_d;
@@ -262,16 +271,53 @@ bool Filt<T>::reset_mem() {
   }
   return true;
 }
+
+template<typename T>
+bool Filt<T>::from_xml(tinyxml2::XMLElement* elem_a) {
+  const char* AR = elem_a->FirstChildElement("AR")->GetText();
+  const char* MA = elem_a->FirstChildElement("MA")->GetText();
+
+  if (AR   == NULL ||
+      MA   == NULL) {
+    return false;
+  }
+
+  n_AR_coefs_d = array_from_xml_pchar(AR_coefs_d, AR);
+  n_MA_coefs_d = array_from_xml_pchar(MA_coefs_d, MA);
+}
+
+// TODO: all of this is sloppy
+// where should it go?
+template<typename T>
+size_t Filt<T>::array_from_xml_pchar(
+    T* array_to_fill_a,
+    const char* array_to_parse_a) {
+  double temp_val;
+  unsigned count = 0;
+  std::istringstream ss(array_to_parse_a);
+  while(ss >> temp_val && count < max_mem_d) {
+    array_to_fill_a[count] = temp_val;
+    count++;
+  }
+  return count;
+}
+#+END_SRC
+
+** end matter
+#+BEGIN_SRC C++ 
+#endif  // SPON_FILT
 #+END_SRC
 
 * ~filt-main~ - a driver / test program for ~Filt~ class
 :PROPERTIES:
-:header-args:  :tangle ../../src/driver/filt-main.cc
+:header-args:  :tangle  (concat (concat spon-filt-base-dir "src/driver/filt-main.cc"))
 :header-args+: :main no
 :END:
-** ~#include~ s and ~int main(int argc, char** argv)~
+
+** top matter
 #+BEGIN_SRC C++
 #include "filt.h"
+
 #include <stdio.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -279,8 +325,9 @@ bool Filt<T>::reset_mem() {
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <boost/program_options.hpp>
+#include "tinyxml2.h"
 
+#include <boost/program_options.hpp>
 int main(int argc, char** argv) {
 #+END_SRC
 ** ~boost::program_options~ 
@@ -306,7 +353,7 @@ int main(int argc, char** argv) {
     ("samp-freq,s",  po::value<double>(&sample_freq)->default_value(8000), "sampling frequency (samps / secs)")
     ("frame-dur,f",  po::value<double>(&frame_dur)->default_value(0.02, "0.02"),   "frame duration     (secs)")
     ("window-dur,w", po::value<double>(&win_dur)->default_value(0.04, "0.04"),     "window duration    (secs)")
-    ("coefs-file,c", po::value<std::string>(&coefs_file)->default_value("none"), "filter coefficient file");    
+    ("coefs-file,c", po::value<std::string>(&coefs_file)->default_value("examples/filters/low-pass-00.xml"), "filter coefficient file");    
 
   po_all.add(po_general).add(po_parameters).add(po_io);
 
@@ -336,12 +383,12 @@ int main(int argc, char** argv) {
 
   long nsamples_read, nsamples_write, n = 0;
 
-  // create a circular buffer
+  // create a filter
   //
-  Filt<double> filter(N, N);  
-  double MA_coefs[10] = {1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0};
-  double AR_coefs[10] = {-1, -0.1, 0, 0, 0, 0, 0, 0, 0, 0};
-  filter.set_filter(AR_coefs, 10, MA_coefs, 10);
+  tinyxml2::XMLDocument doc;
+  doc.LoadFile(coefs_file.c_str());
+  Filt<double> filter(N, N);
+  filter.from_xml(doc.FirstChildElement());
 #+END_SRC
 ** running the filter
 #+BEGIN_SRC C++ 
@@ -358,6 +405,8 @@ int main(int argc, char** argv) {
   //
   filter.pull(buf_out, nsamples_read);
   fwrite(buf_out, sizeof(double), nsamples_read, out_file);
+
+  fclose(out_file);
   return true;
 }
 #+END_SRC
@@ -510,22 +559,4 @@ h(1:5)
 MA_coefs = [0.5 0.5];
 AR_coefs = [1];
 [h, w] = freqz(MA_coefs, AR_coefs);
-#+END_SRC
-* running in gdb (in ~emacs~)
-#+BEGIN_SRC elisp 
-(gdb "gdb -i=mi bin/run")
-#+END_SRC
-
-and then, at the ~gdb~ prompt, source the file ~gdb_script~ below by typing 
-
-#+BEGIN_SRC sh
-source ../src/gdb-scripts/<name-of-script>
-#+END_SRC
-
-*** gdb scripts
-**** observing the filtering / convolution
-#+BEGIN_SRC sh :tangle ../../gdb-scripts/watch-filter
-# b main.cc:79
-b Filt<double>::pull(double*, unsigned long)
-run -i ../examples/inputs/impulse.raw  -o ../examples/outputs/impulse_filt.raw 
 #+END_SRC

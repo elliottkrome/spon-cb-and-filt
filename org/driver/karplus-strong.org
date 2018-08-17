@@ -1,6 +1,6 @@
 * ~Karplus-Strong~ - a program demonstrating Karplus-Strong string synthesis
 :PROPERTIES:
-:header-args:  :tangle ../../src/driver/karplus-strong.cc
+:header-args:  :tangle (concat spon-filt-base-dir "src/driver/karplus-strong.cc")
 :header-args+: :main no
 :END:
 
