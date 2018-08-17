@@ -34,7 +34,7 @@ DEPS += -I$(THIRD_PARTY_INCLUDE)
 TEST_COMMAND_1 = $(EXEC) \
 	-c examples/filters/low-pass-00.xml \
 	-i examples/inputs/sine_sweep.raw \
-	-o examples/outputs/sine_sweep_filt.raw
+	-o examples/outputs/sine_sweep_filt.raw\
 
 all: filt-main noise-main
 
@@ -57,18 +57,25 @@ $(SRC_CLASS_DIR)/%.h: $(ORG_CLASS_DIR)/spon-%.org
 	emacs $< $(TANGLE_BATCH_SUFFIX) # --batch -f org-babel-tangle --kill
 
 third-party: tiny-xml gtest
-
 clean-third-party:
-	rm -f third-party/include/*
-	rm -f third-party/lib/*
+	rm -rf third-party/include/*
+	rm -rf third-party/lib/*
 
 tiny-xml:
-	cd third-party/tinyxml2              && \
+	cd third-party/repos/tinyxml2        && \
 	$(CC) -c -o tinyxml2.o tinyxml2.cpp  && \
 	ar cr libtinyxml2.a tinyxml2.o       && \
-	cp libtinyxml2.a ../lib              && \
-	cp tinyxml2.h ../include
+	cp libtinyxml2.a ../../lib           && \
+	cp tinyxml2.h ../../include
 
+GTEST_CMAKE_FLAGS = -DCMAKE_CXX_COMPILER="$(CC)" -DCMAKE_CXX_FLAGS="-std=c++11" -stdlib=libc++
+gtest:
+	cd third-party/repos/googletest               && \
+	cmake $(GTEST_CMAKE_FLAGS) .                  && \
+	make                                          && \
+	cp -a googletest/include/gtest ../../include  && \
+	cp googlemock/gtest/libgtest.a ../../lib      && \
+	cp googlemock/gtest/libgtest_main.a ../../lib
 
 clean:
 	rm -f $(EXEC)

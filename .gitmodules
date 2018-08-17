@@ -1,6 +1,8 @@
 [submodule "third-party/tinyxml2"]
-	path = third-party/tinyxml2
+	path = third-party/repos/tinyxml2
 	url = https://github.com/leethomason/tinyxml2.git
+	ignore = dirty
 [submodule "googletest"]
-	path = third-party/googletest
+	path = third-party/repos/googletest
 	url = https://github.com/google/googletest.git
+	ignore = dirty
